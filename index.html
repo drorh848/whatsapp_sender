@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>שליחת הזמנות | חינה חמרי</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Hebrew:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --gold: #c9963a;
+    --gold-light: #e8c06a;
+    --gold-dark: #8a6020;
+    --deep: #1a0e05;
+    --warm: #2d1a08;
+    --cream: #fdf6e8;
+    --henna: #7a2e0e;
+    --henna-light: #c4622d;
+    --success: #27ae60;
+    --wa: #25D366;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Noto Serif Hebrew', serif;
+    background: var(--deep);
+    color: var(--cream);
+    min-height: 100vh;
+  }
+
+  .bg {
+    position: fixed; inset: 0;
+    background: radial-gradient(ellipse at 30% 20%, rgba(201,150,58,0.07) 0%, transparent 50%),
+                radial-gradient(ellipse at 70% 80%, rgba(122,46,14,0.1) 0%, transparent 50%),
+                var(--deep);
+    z-index: 0;
+  }
+
+  .container { position: relative; z-index: 1; max-width: 540px; margin: 0 auto; padding: 24px 16px; }
+
+  .page { display: none; }
+  .page.active { display: block; animation: fadeIn 0.4s ease; }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
+
+  /* HEADER */
+  .app-header { text-align: center; margin-bottom: 24px; }
+  .app-title { font-size: 20px; color: var(--gold-light); font-weight: 700; margin-bottom: 4px; }
+  .app-subtitle { font-size: 12px; color: rgba(253,246,232,0.4); letter-spacing: 2px; }
+  .user-badge { display:inline-block; margin-top:10px; padding:6px 16px; background:rgba(201,150,58,0.15); border:1px solid rgba(201,150,58,0.3); border-radius:20px; font-size:13px; color:var(--gold-light); }
+
+  .gold-line { height:1px; background:linear-gradient(90deg,transparent,var(--gold),transparent); margin:16px 0; }
+
+  /* FORM */
+  .form-group { margin-bottom: 16px; }
+  .form-label { display:block; font-size:12px; color:var(--gold); letter-spacing:2px; margin-bottom:6px; }
+  .form-input { width:100%; padding:13px 16px; background:rgba(255,255,255,0.05); border:1px solid rgba(201,150,58,0.3); border-radius:3px; color:var(--cream); font-family:'Noto Serif Hebrew',serif; font-size:15px; outline:none; transition:border-color 0.2s; }
+  .form-input:focus { border-color:var(--gold); background:rgba(201,150,58,0.06); }
+  .form-input::placeholder { color:rgba(253,246,232,0.25); }
+  .error-msg { color:var(--henna-light); font-size:13px; margin-top:8px; display:none; }
+
+  /* BUTTONS */
+  .btn { width:100%; padding:14px; border:none; border-radius:3px; font-family:'Noto Serif Hebrew',serif; font-size:15px; font-weight:600; cursor:pointer; transition:all 0.2s; letter-spacing:1px; }
+  .btn-gold { background:linear-gradient(135deg,var(--gold-dark),var(--gold)); color:var(--deep); box-shadow:0 4px 15px rgba(201,150,58,0.3); }
+  .btn-gold:hover { transform:translateY(-1px); }
+  .btn-outline { background:transparent; border:1px solid rgba(201,150,58,0.3); color:rgba(253,246,232,0.5); font-size:13px; padding:10px; }
+  .btn-outline:hover { border-color:var(--gold); color:var(--gold); }
+
+  /* STATS */
+  .stats-row { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:20px; }
+  .stat-box { background:rgba(201,150,58,0.08); border:1px solid rgba(201,150,58,0.2); border-radius:4px; padding:12px 8px; text-align:center; }
+  .stat-num { font-size:26px; color:var(--gold-light); font-weight:700; line-height:1; }
+  .stat-label { font-size:10px; color:rgba(253,246,232,0.4); letter-spacing:1px; margin-top:4px; }
+
+  /* FILTERS */
+  .filter-row { display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap; }
+  .filter-btn { padding:8px 14px; background:rgba(255,255,255,0.04); border:1px solid rgba(201,150,58,0.2); border-radius:20px; color:rgba(253,246,232,0.5); font-family:'Noto Serif Hebrew',serif; font-size:13px; cursor:pointer; transition:all 0.2s; }
+  .filter-btn.active { background:rgba(201,150,58,0.2); border-color:var(--gold); color:var(--gold-light); }
+
+  /* GUEST LIST */
+  .section-title { font-size:11px; letter-spacing:3px; color:var(--gold); margin-bottom:10px; opacity:0.8; }
+  .guests-list { display:flex; flex-direction:column; gap:8px; }
+
+  .guest-item {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:12px 14px; background:rgba(255,255,255,0.03);
+    border:1px solid rgba(201,150,58,0.1); border-radius:4px; gap:10px;
+  }
+  .guest-item.sent { border-color:rgba(37,211,102,0.3); background:rgba(37,211,102,0.04); }
+
+  .guest-info { flex:1; min-width:0; }
+  .guest-name { font-size:15px; color:var(--cream); }
+  .guest-meta { font-size:11px; color:rgba(253,246,232,0.35); margin-top:2px; }
+
+  .btn-wa {
+    display:flex; align-items:center; gap:6px; padding:10px 14px;
+    background:var(--wa); border:none; border-radius:3px;
+    color:white; font-family:'Noto Serif Hebrew',serif; font-size:13px;
+    cursor:pointer; transition:all 0.2s; white-space:nowrap; text-decoration:none;
+    flex-shrink:0;
+  }
+  .btn-wa:hover { background:#20ba5a; transform:translateY(-1px); }
+  .btn-wa.sent-btn { background:rgba(37,211,102,0.2); border:1px solid rgba(37,211,102,0.4); color:#a9dfbf; cursor:default; }
+  .btn-wa.sent-btn:hover { transform:none; }
+
+  .sent-badge { font-size:11px; color:#a9dfbf; white-space:nowrap; }
+
+  .empty-state { text-align:center; padding:40px; color:rgba(253,246,232,0.25); font-size:13px; letter-spacing:1px; }
+
+  .loading { text-align:center; padding:30px; color:var(--gold); font-size:13px; letter-spacing:2px; }
+
+  /* MESSAGE PREVIEW */
+  .msg-preview {
+    background:rgba(37,211,102,0.06); border:1px solid rgba(37,211,102,0.2);
+    border-radius:6px; padding:16px; margin-bottom:20px;
+    font-size:14px; line-height:1.8; color:rgba(253,246,232,0.8);
+    direction:rtl; white-space:pre-line;
+  }
+  .msg-label { font-size:11px; letter-spacing:2px; color:#a9dfbf; margin-bottom:8px; }
+
+  /* PROGRESS */
+  .progress-bar-bg { background:rgba(255,255,255,0.06); border-radius:10px; height:6px; margin-bottom:6px; overflow:hidden; }
+  .progress-bar { height:100%; background:linear-gradient(90deg,var(--gold-dark),var(--gold)); border-radius:10px; transition:width 0.3s; }
+  .progress-text { font-size:12px; color:rgba(253,246,232,0.4); text-align:center; margin-bottom:16px; }
+
+  .logout-btn { text-align:center; font-size:11px; color:rgba(253,246,232,0.2); cursor:pointer; margin-top:20px; letter-spacing:1px; }
+  .logout-btn:hover { color:rgba(253,246,232,0.5); }
+
+  /* LOGIN */
+  .login-card { background:rgba(255,255,255,0.03); border:1px solid rgba(201,150,58,0.2); border-radius:6px; padding:28px 24px; text-align:center; }
+  .login-icon { font-size:40px; margin-bottom:16px; }
+  .login-title { font-size:20px; color:var(--gold-light); margin-bottom:4px; }
+  .login-sub { font-size:12px; color:rgba(253,246,232,0.4); margin-bottom:24px; letter-spacing:1px; }
+
+  .toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(80px); background:var(--success); color:white; padding:12px 24px; border-radius:4px; font-size:14px; z-index:100; transition:transform 0.3s; white-space:nowrap; }
+  .toast.show { transform:translateX(-50%) translateY(0); }
+  .toast.err { background:var(--henna-light); }
+
+  .guests-list::-webkit-scrollbar { width:3px; }
+  .guests-list::-webkit-scrollbar-thumb { background:rgba(201,150,58,0.3); border-radius:2px; }
+</style>
+</head>
+<body>
+<div class="bg"></div>
+
+<div class="container">
+
+  <!-- LOGIN -->
+  <div class="page active" id="page-login">
+    <div class="app-header">
+      <div class="app-title">שליחת הזמנות WhatsApp</div>
+      <div class="app-subtitle">חינה | אמרי וליטל חמרי</div>
+    </div>
+    <div class="login-card">
+      <div class="login-icon">📲</div>
+      <div class="login-title">כניסה למערכת</div>
+      <div class="login-sub">רק לאמרי ולליטל</div>
+      <div class="form-group">
+        <label class="form-label">שם</label>
+        <input class="form-input" id="loginName" type="text" placeholder="אמרי / ליטל"
+          onkeydown="if(event.key==='Enter') document.getElementById('loginCode').focus()" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">קוד אישי</label>
+        <input class="form-input" id="loginCode" type="password" inputmode="numeric"
+          placeholder="קוד מספרי" onkeydown="if(event.key==='Enter') doLogin()" />
+        <div class="error-msg" id="loginError">❌ שם או קוד שגוי</div>
+      </div>
+      <button class="btn btn-gold" onclick="doLogin()">כניסה ←</button>
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <div class="page" id="page-main">
+    <div class="app-header">
+      <div class="app-title">📲 שליחת הזמנות</div>
+      <div class="app-subtitle">חינה | אמרי וליטל חמרי</div>
+      <div class="user-badge" id="userBadge">👤</div>
+    </div>
+
+    <!-- Message preview -->
+    <div class="msg-label">✉️ נוסח ההודעה</div>
+    <div class="msg-preview" id="msgPreview"></div>
+
+    <!-- Stats -->
+    <div class="stats-row">
+      <div class="stat-box">
+        <div class="stat-num" id="statTotal">0</div>
+        <div class="stat-label">סה"כ</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-num" id="statSent" style="color:#a9dfbf;">0</div>
+        <div class="stat-label">נשלח</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-num" id="statLeft" style="color:var(--henna-light);">0</div>
+        <div class="stat-label" id="statLeftLabel">אישרו</div>
+      </div>
+    </div>
+
+    <!-- Progress -->
+    <div class="progress-bar-bg">
+      <div class="progress-bar" id="progressBar" style="width:0%"></div>
+    </div>
+    <div class="progress-text" id="progressText">0 / 0 נשלחו</div>
+
+    <!-- Filters -->
+    <div class="filter-row">
+      <button class="filter-btn active" onclick="setFilter('all', this)">הכל</button>
+      <button class="filter-btn" onclick="setFilter('not_sent', this)">📤 לא נשלח</button>
+      <button class="filter-btn" onclick="setFilter('waiting', this)">⏳ ממתין</button>
+      <button class="filter-btn" onclick="setFilter('confirmed', this)">✅ אישר</button>
+      <button class="filter-btn" onclick="setFilter('declined', this)">❌ לא מגיע</button>
+    </div>
+
+    <div class="section-title">רשימת מוזמנים</div>
+    <div class="guests-list" id="guestsList">
+      <div class="loading">טוען רשימה...</div>
+    </div>
+
+    <div class="gold-line" style="margin-top:20px;"></div>
+    <button class="btn btn-outline" onclick="resetAll()" style="margin-top:10px;">🔄 אפס סימוני שליחה</button>
+    <div class="logout-btn" onclick="doLogout()">⬅ יציאה</div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- Firebase -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getDatabase, ref, onValue, set, remove }
+    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyAMRwapWhuzScVtatbQhykIGMldgEacndQ",
+    authDomain: "henna-hamri.firebaseapp.com",
+    databaseURL: "https://henna-hamri-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "henna-hamri",
+    storageBucket: "henna-hamri.firebasestorage.app",
+    messagingSenderId: "578518609000",
+    appId: "1:578518609000:web:1726b2dc107a7e716d9fdd"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+
+  window._db = db;
+  window._ref = ref;
+  window._onValue = onValue;
+  window._set = set;
+  window._remove = remove;
+  window._firebaseReady = true;
+  window.dispatchEvent(new Event('firebaseReady'));
+</script>
+
+<script>
+  // ===== CONFIG =====
+  const USERS = {
+    "אמרי": { code: "9325" },
+    "ליטל": { code: "7236" }
+  };
+
+  const INVITE_LINK = "https://hina-hamri.netlify.app/";
+
+  const MSG = `💛 אמרי & ליטל 💛
+שמחים להזמינכם לחגוג עמנו
+את ערב החינה
+לצפייה בהזמנה: ${INVITE_LINK}`;
+
+  // ===== STATE =====
+  let currentUser = null;
+  let allGuests = []; // { id, name, phone, category, side }
+  let sentMap = {}; // { id: true }
+  let currentFilter = 'all';
+  let rsvpMap = {}; // { name: { attending, guests } }
+
+  // ===== LOGIN =====
+  function doLogin() {
+    const name = document.getElementById('loginName').value.trim();
+    const code = document.getElementById('loginCode').value.trim();
+    const err = document.getElementById('loginError');
+    const user = USERS[name];
+    if (user && user.code === code) {
+      err.style.display = 'none';
+      currentUser = name;
+      document.getElementById('loginCode').value = '';
+      startSession();
+    } else {
+      err.style.display = 'block';
+    }
+  }
+  window.doLogin = doLogin;
+
+  function doLogout() {
+    currentUser = null;
+    allGuests = [];
+    sentMap = {};
+    document.getElementById('loginName').value = '';
+    showPage('page-login');
+  }
+  window.doLogout = doLogout;
+
+  // ===== SESSION =====
+  function startSession() {
+    document.getElementById('userBadge').textContent = `👤 ${currentUser}`;
+    document.getElementById('msgPreview').textContent = MSG;
+    showPage('page-main');
+    loadData();
+  }
+
+  // ===== LOAD DATA =====
+  function loadData() {
+    if (!window._firebaseReady) {
+      window.addEventListener('firebaseReady', loadData, { once: true });
+      return;
+    }
+
+    const keyToName = {
+      amri: 'אמרי', lital: 'ליטל', dror: 'דרור',
+      bracha: 'ברכה', shoshana: 'שושי', shai: 'שי'
+    };
+
+    // טען מוזמנים
+    const guestsRef = window._ref(window._db, 'guests');
+    window._onValue(guestsRef, (snap) => {
+      const data = snap.val() || {};
+      allGuests = [];
+      for (const [userKey, userGuests] of Object.entries(data)) {
+        if (!userGuests) continue;
+        for (const [id, g] of Object.entries(userGuests)) {
+          if (g && g.name) {
+            allGuests.push({
+              id: userKey + '_' + id,
+              fireKey: id,
+              userKey,
+              name: g.name,
+              phone: g.phone || '',
+              category: g.category || '',
+              side: keyToName[userKey] || userKey
+            });
+          }
+        }
+      }
+      allGuests.sort((a, b) => a.name.localeCompare(b.name, 'he'));
+      renderGuests();
+      updateStats();
+    });
+
+    // טען סימוני שליחה
+    const sentRef = window._ref(window._db, 'wa_sent');
+    window._onValue(sentRef, (snap) => {
+      sentMap = snap.val() || {};
+      renderGuests();
+      updateStats();
+    });
+  }
+
+  // ===== STATUS HELPER =====
+  function getStatus(g) {
+    const isSent = sentMap[g.id];
+    if (!isSent) return 'not_sent';
+    // נרמל טלפון לצורך השוואה
+    let p = (g.phone || '').replace(/[-\s().+]/g, '');
+    if (p.startsWith('972')) p = '0' + p.slice(3);
+    const rsvp = rsvpMap[p];
+    if (!rsvp) return 'waiting';
+    return rsvp.attending ? 'confirmed' : 'declined';
+  }
+
+  // ===== RENDER =====
+  function renderGuests() {
+    const list = document.getElementById('guestsList');
+    let filtered = allGuests;
+
+    if (currentFilter === 'not_sent') filtered = allGuests.filter(g => getStatus(g) === 'not_sent');
+    if (currentFilter === 'waiting') filtered = allGuests.filter(g => getStatus(g) === 'waiting');
+    if (currentFilter === 'confirmed') filtered = allGuests.filter(g => getStatus(g) === 'confirmed');
+    if (currentFilter === 'declined') filtered = allGuests.filter(g => getStatus(g) === 'declined');
+
+    if (filtered.length === 0) {
+      list.innerHTML = '<div class="empty-state">אין מוזמנים להצגה</div>';
+      return;
+    }
+
+    list.innerHTML = filtered.map(g => {
+      const isSent = sentMap[g.id];
+      const phone = normalizePhone(g.phone);
+      const msgEncoded = encodeURIComponent(MSG);
+      const waLink = phone
+        ? `https://wa.me/${phone}?text=${msgEncoded}`
+        : `https://wa.me/?text=${msgEncoded}`;
+
+      return `
+        <div class="guest-item ${isSent ? 'sent' : ''}" id="item-${g.id}">
+          <div class="guest-info">
+            <div class="guest-name">${g.name}</div>
+            <div class="guest-meta">${g.phone || 'ללא טלפון'} · ${g.side}${g.category ? ' · ' + g.category : ''}</div>
+          </div>
+          ${isSent
+            ? `<span class="sent-badge">✅ נשלח</span>`
+            : `<button class="btn-wa" onclick="sendAndReturn('${g.id}', '${phone}', '${g.name}');">
+                <span>📲</span> שלח
+               </button>`
+          }
+        </div>`;
+    }).join('');
+  }
+
+  // ===== MARK SENT =====
+  async function markSent(id) {
+    if (!window._firebaseReady) return;
+    const sentRef = window._ref(window._db, 'wa_sent/' + id);
+    await window._set(sentRef, true);
+    showToast('✅ סומן כנשלח!');
+  }
+  window.markSent = markSent;
+
+  // ===== SEND AND RETURN =====
+  async function sendAndReturn(id, phone, name) {
+    const msgEncoded = encodeURIComponent(MSG);
+    const waLink = phone
+      ? `https://wa.me/${phone}?text=${msgEncoded}`
+      : `https://wa.me/?text=${msgEncoded}`;
+
+    // סמן כנשלח
+    await markSent(id);
+
+    // פתח WhatsApp בחלון חדש
+    window.open(waLink, '_blank');
+
+    // אחרי 1 שניה — עדכן סטטוס
+    setTimeout(() => {
+      // מצא את המוזמן הבא שעדיין לא נשלח
+      const nextGuest = allGuests.find(g => !sentMap[g.id]);
+      if (nextGuest) {
+        showToast(`הבא: ${nextGuest.name} ←`);
+      } else {
+        showToast('🎉 כולם קיבלו הזמנה!');
+      }
+      // עבור לפילטר "לא נשלח"
+      currentFilter = 'pending';
+      document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.filter-btn')[1].classList.add('active');
+      renderGuests();
+      updateStats();
+    }, 1000);
+  }
+  window.sendAndReturn = sendAndReturn;
+
+  // ===== RESET ALL =====
+  async function resetAll() {
+    const first = confirm('האם אתה בטוח?\nפעולה זו תמחק את כל סימוני השליחה.');
+    if (!first) return;
+    const second = confirm('⚠️ שים לב!\nאם תאפס עכשיו ותשלח שוב — אנשים יקבלו הזמנה כפולה.\nלהמשיך ולאפס הכל?');
+    if (!second) return;
+    const sentRef = window._ref(window._db, 'wa_sent');
+    await window._remove(sentRef);
+    showToast('🔄 אופסו כל הסימונים');
+  }
+  window.resetAll = resetAll;
+
+  // ===== STATS =====
+  function updateStats() {
+    const total = allGuests.length;
+    const sent = allGuests.filter(g => sentMap[g.id]).length;
+    const confirmed = allGuests.filter(g => getStatus(g) === 'confirmed').length;
+    document.getElementById('statTotal').textContent = total;
+    document.getElementById('statSent').textContent = sent;
+    document.getElementById('statLeft').textContent = confirmed;
+    document.getElementById('statLeftLabel').textContent = 'אישרו';
+    const pct = total > 0 ? Math.round(sent / total * 100) : 0;
+    document.getElementById('progressBar').style.width = pct + '%';
+    document.getElementById('progressText').textContent = `${sent} / ${total} נשלחו (${pct}%)`;
+  }
+
+  // ===== FILTER =====
+  function setFilter(f, btn) {
+    currentFilter = f;
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderGuests();
+  }
+  window.setFilter = setFilter;
+
+  // ===== NORMALIZE PHONE =====
+  function normalizePhone(p) {
+    if (!p) return '';
+    let n = p.replace(/[-\s().+]/g, '');
+    if (n.startsWith('972')) return n;
+    if (n.startsWith('0')) return '972' + n.slice(1);
+    return n;
+  }
+
+  // ===== NAVIGATION =====
+  function showPage(id) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    window.scrollTo(0, 0);
+  }
+
+  // ===== TOAST =====
+  function showToast(msg, isErr = false) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = 'toast' + (isErr ? ' err' : '');
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2500);
+  }
+
+  // Login on Enter
+  document.getElementById('loginName').addEventListener('keydown', e => {
+    if (e.key === 'Enter') document.getElementById('loginCode').focus();
+  });
+</script>
+</body>
+</html>

@@ -193,7 +193,7 @@
       </div>
       <div class="stat-box">
         <div class="stat-num" id="statLeft" style="color:var(--henna-light);">0</div>
-        <div class="stat-label" id="statLeftLabel">אישרו</div>
+        <div class="stat-label">נותר</div>
       </div>
     </div>
 
@@ -206,10 +206,8 @@
     <!-- Filters -->
     <div class="filter-row">
       <button class="filter-btn active" onclick="setFilter('all', this)">הכל</button>
-      <button class="filter-btn" onclick="setFilter('not_sent', this)">📤 לא נשלח</button>
-      <button class="filter-btn" onclick="setFilter('waiting', this)">⏳ ממתין</button>
-      <button class="filter-btn" onclick="setFilter('confirmed', this)">✅ אישר</button>
-      <button class="filter-btn" onclick="setFilter('declined', this)">❌ לא מגיע</button>
+      <button class="filter-btn" onclick="setFilter('pending', this)">לא נשלח</button>
+      <button class="filter-btn" onclick="setFilter('sent', this)">נשלח ✅</button>
     </div>
 
     <div class="section-title">רשימת מוזמנים</div>
@@ -261,7 +259,7 @@
     "ליטל": { code: "7236" }
   };
 
-  const INVITE_LINK = "https://drorh848.github.io/hina-hamri/";
+  const INVITE_LINK = "https://hina-hamri.netlify.app/";
 
   const MSG = `💛 אמרי & ליטל 💛
 שמחים להזמינכם לחגוג עמנו
@@ -273,7 +271,6 @@
   let allGuests = []; // { id, name, phone, category, side }
   let sentMap = {}; // { id: true }
   let currentFilter = 'all';
-  let rsvpMap = {}; // { name: { attending, guests } }
 
   // ===== LOGIN =====
   function doLogin() {
@@ -356,27 +353,13 @@
     });
   }
 
-  // ===== STATUS HELPER =====
-  function getStatus(g) {
-    const isSent = sentMap[g.id];
-    if (!isSent) return 'not_sent';
-    // נרמל טלפון לצורך השוואה
-    let p = (g.phone || '').replace(/[-\s().+]/g, '');
-    if (p.startsWith('972')) p = '0' + p.slice(3);
-    const rsvp = rsvpMap[p];
-    if (!rsvp) return 'waiting';
-    return rsvp.attending ? 'confirmed' : 'declined';
-  }
-
   // ===== RENDER =====
   function renderGuests() {
     const list = document.getElementById('guestsList');
     let filtered = allGuests;
 
-    if (currentFilter === 'not_sent') filtered = allGuests.filter(g => getStatus(g) === 'not_sent');
-    if (currentFilter === 'waiting') filtered = allGuests.filter(g => getStatus(g) === 'waiting');
-    if (currentFilter === 'confirmed') filtered = allGuests.filter(g => getStatus(g) === 'confirmed');
-    if (currentFilter === 'declined') filtered = allGuests.filter(g => getStatus(g) === 'declined');
+    if (currentFilter === 'sent') filtered = allGuests.filter(g => sentMap[g.id]);
+    if (currentFilter === 'pending') filtered = allGuests.filter(g => !sentMap[g.id]);
 
     if (filtered.length === 0) {
       list.innerHTML = '<div class="empty-state">אין מוזמנים להצגה</div>';
@@ -399,9 +382,9 @@
           </div>
           ${isSent
             ? `<span class="sent-badge">✅ נשלח</span>`
-            : `<button class="btn-wa" onclick="sendAndReturn('${g.id}', '${phone}', '${g.name}');">
+            : `<a class="btn-wa" href="${waLink}" target="_blank" onclick="markSent('${g.id}')">
                 <span>📲</span> שלח
-               </button>`
+               </a>`
           }
         </div>`;
     }).join('');
@@ -416,44 +399,9 @@
   }
   window.markSent = markSent;
 
-  // ===== SEND AND RETURN =====
-  async function sendAndReturn(id, phone, name) {
-    const msgEncoded = encodeURIComponent(MSG);
-    const waLink = phone
-      ? `https://wa.me/${phone}?text=${msgEncoded}`
-      : `https://wa.me/?text=${msgEncoded}`;
-
-    // סמן כנשלח
-    await markSent(id);
-
-    // פתח WhatsApp בחלון חדש
-    window.open(waLink, '_blank');
-
-    // אחרי 1 שניה — עדכן סטטוס
-    setTimeout(() => {
-      // מצא את המוזמן הבא שעדיין לא נשלח
-      const nextGuest = allGuests.find(g => !sentMap[g.id]);
-      if (nextGuest) {
-        showToast(`הבא: ${nextGuest.name} ←`);
-      } else {
-        showToast('🎉 כולם קיבלו הזמנה!');
-      }
-      // עבור לפילטר "לא נשלח"
-      currentFilter = 'pending';
-      document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-      document.querySelectorAll('.filter-btn')[1].classList.add('active');
-      renderGuests();
-      updateStats();
-    }, 1000);
-  }
-  window.sendAndReturn = sendAndReturn;
-
   // ===== RESET ALL =====
   async function resetAll() {
-    const first = confirm('האם אתה בטוח?\nפעולה זו תמחק את כל סימוני השליחה.');
-    if (!first) return;
-    const second = confirm('⚠️ שים לב!\nאם תאפס עכשיו ותשלח שוב — אנשים יקבלו הזמנה כפולה.\nלהמשיך ולאפס הכל?');
-    if (!second) return;
+    if (!confirm('למחוק את כל סימוני השליחה?')) return;
     const sentRef = window._ref(window._db, 'wa_sent');
     await window._remove(sentRef);
     showToast('🔄 אופסו כל הסימונים');
@@ -464,11 +412,10 @@
   function updateStats() {
     const total = allGuests.length;
     const sent = allGuests.filter(g => sentMap[g.id]).length;
-    const confirmed = allGuests.filter(g => getStatus(g) === 'confirmed').length;
+    const left = total - sent;
     document.getElementById('statTotal').textContent = total;
     document.getElementById('statSent').textContent = sent;
-    document.getElementById('statLeft').textContent = confirmed;
-    document.getElementById('statLeftLabel').textContent = 'אישרו';
+    document.getElementById('statLeft').textContent = left;
     const pct = total > 0 ? Math.round(sent / total * 100) : 0;
     document.getElementById('progressBar').style.width = pct + '%';
     document.getElementById('progressText').textContent = `${sent} / ${total} נשלחו (${pct}%)`;

@@ -354,13 +354,16 @@
     const msgEnc = encodeURIComponent(msgToSend);
     const waLink = phone ? `https://wa.me/${phone}?text=${msgEnc}` : `https://wa.me/?text=${msgEnc}`;
 
-    // סמן כנשלח
+    // תיקון iOS/Safari: פתיחת WhatsApp מיד בלחיצה — לפני כל await,
+    // אחרת ספארי חוסם את הפתיחה כפופאפ
+    window.open(waLink, '_blank');
+
+    // סמן כנשלח (ברקע, אחרי הפתיחה)
     if (window._firebaseReady) {
       const sentRef = window._ref(window._db, 'wa_sent/' + id);
       await window._set(sentRef, true);
     }
 
-    window.open(waLink, '_blank');
     showToast(isReminder ? '⏳ תזכורת נשלחה!' : '✅ סומן כנשלח!');
 
     setTimeout(() => {

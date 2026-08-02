@@ -189,21 +189,76 @@
 
   const INVITE_LINK = "https://drorh848.github.io/hina-hamri/";
 
-  const MSG = `💜 אמרי & ליטל 💜
-שמחים להזמינכם לחגוג עמנו
-את ערב החינה
-לצפייה בהזמנה: ${INVITE_LINK}`;
+  // קישור אישי לכל מוזמן — הטופס ייפתח אצלו עם שם וטלפון ממולאים
+  function inviteLinkFor(guestId) {
+    return guestId ? `${INVITE_LINK}?g=${guestId}` : INVITE_LINK;
+  }
 
-  const MSG_REMINDER = `💜 היי!
+  function buildMsg(guestId, isReminder) {
+    const link = inviteLinkFor(guestId);
+    return isReminder
+      ? `💜 היי!
 שלחנו לך הזמנה לחינה של אמרי & ליטל
 עדיין לא קיבלנו ממך אישור הגעה 😊
-נשמח לדעת! לאישור: ${INVITE_LINK}`;
+נשמח לדעת! לאישור: ${link}`
+      : `💜 אמרי & ליטל 💜
+שמחים להזמינכם לחגוג עמנו
+את ערב החינה
+לצפייה בהזמנה: ${link}`;
+  }
+
+  // נוסחים לתצוגה מקדימה בלבד
+  const MSG          = buildMsg(null, false);
+  const MSG_REMINDER = buildMsg(null, true);
 
   let currentUser = null;
   let allGuests   = [];
+  let groups      = [];   // מקובצים לפי טלפון — הודעה אחת לכל מספר
   let sentMap     = {};
-  let rsvpMap     = {};
+  let rsvpMap     = {};   // לפי טלפון מקומי
+  let rsvpById    = {};   // לפי מזהה אישי — מדויק יותר
   let currentFilter = 'all';
+
+  // ===== קיבוץ לפי טלפון =====
+  // כמה בני משפחה עם אותו מספר = הודעה אחת בלבד.
+  // מוזמן ללא טלפון = קבוצה נפרדת משלו, מסומנת ככזו.
+  function buildGroups() {
+    const byPhone = new Map();
+    const result  = [];
+
+    for (const g of allGuests) {
+      const p = normalizePhone(g.phone);
+      if (!p) {
+        result.push({ key: 'nophone_' + g.id, phone: '', members: [g], noPhone: true });
+        continue;
+      }
+      if (!byPhone.has(p)) {
+        const grp = { key: 'p_' + p, phone: p, members: [], noPhone: false };
+        byPhone.set(p, grp);
+        result.push(grp);
+      }
+      byPhone.get(p).members.push(g);
+    }
+
+    for (const grp of result) {
+      grp.names     = grp.members.map(m => m.name).join(', ');
+      grp.primaryId = grp.members[0].id;
+      grp.side      = [...new Set(grp.members.map(m => m.side))].join(' · ');
+      grp.category  = [...new Set(grp.members.map(m => m.category).filter(Boolean))].join(' · ');
+    }
+    groups = result;
+  }
+
+  function isGroupSent(grp) {
+    return grp.members.some(m => sentMap[m.id]);
+  }
+
+  function groupRsvp(grp) {
+    for (const m of grp.members) {
+      if (rsvpById[m.id]) return rsvpById[m.id];
+    }
+    return grp.phone ? rsvpMap[grp.phone] : null;
+  }
 
   // ===== LOGIN =====
   function doLogin() {
@@ -268,6 +323,7 @@
         }
       }
       allGuests.sort((a, b) => a.name.localeCompare(b.name, 'he'));
+      buildGroups();
       renderGuests();
       updateStats();
     });
@@ -284,13 +340,15 @@
     const rsvpRef = window._ref(window._db, 'henna_rsvp');
     window._onValue(rsvpRef, (snap) => {
       const data = snap.val() || {};
-      rsvpMap = {};
-      for (const entry of Object.values(data)) {
-        if (entry && entry.phone) {
-          let p = normalizePhone(entry.phone);
-          if (p.startsWith('972')) p = '0' + p.slice(3);
-          rsvpMap[p] = { attending: entry.attending, guests: entry.guests || 0 };
-        }
+      rsvpMap  = {};
+      rsvpById = {};
+      for (const [key, entry] of Object.entries(data)) {
+        if (!entry) continue;
+        const rec = { attending: entry.attending, guests: entry.guests || 0 };
+        // שיוך ודאי לפי מזהה אישי (המפתח עצמו הוא המזהה כשנשלח קישור אישי)
+        const gid = entry.guestId || (key.includes('_') ? key : null);
+        if (gid) rsvpById[gid] = rec;
+        if (entry.phone) rsvpMap[normalizePhone(entry.phone)] = rec;
       }
       renderGuests();
       updateStats();
@@ -298,11 +356,9 @@
   }
 
   // ===== STATUS =====
-  function getStatus(g) {
-    if (!sentMap[g.id]) return 'not_sent';
-    let p = (g.phone || '').replace(/[-\s().+]/g, '').replace(/[oO]/g, '0');
-    if (p.startsWith('972')) p = '0' + p.slice(3);
-    const rsvp = rsvpMap[p];
+  function getStatus(grp) {
+    if (!isGroupSent(grp)) return 'not_sent';
+    const rsvp = groupRsvp(grp);
     if (!rsvp) return 'waiting';
     return rsvp.attending ? 'confirmed' : 'declined';
   }
@@ -310,69 +366,103 @@
   // ===== RENDER =====
   function renderGuests() {
     const list = document.getElementById('guestsList');
-    let filtered = allGuests;
-    if (currentFilter === 'not_sent')  filtered = allGuests.filter(g => getStatus(g) === 'not_sent');
-    if (currentFilter === 'waiting')   filtered = allGuests.filter(g => getStatus(g) === 'waiting');
-    if (currentFilter === 'confirmed') filtered = allGuests.filter(g => getStatus(g) === 'confirmed');
-    if (currentFilter === 'declined')  filtered = allGuests.filter(g => getStatus(g) === 'declined');
+    let filtered = groups;
+    if (currentFilter !== 'all') {
+      filtered = groups.filter(grp => getStatus(grp) === currentFilter);
+    }
 
     if (filtered.length === 0) {
       list.innerHTML = '<div class="empty-state">אין מוזמנים להצגה</div>';
       return;
     }
 
-    list.innerHTML = filtered.map(g => {
-      const isSent  = sentMap[g.id];
-      const phone   = normalizePhone(g.phone);
-      const msgEnc  = encodeURIComponent(MSG);
-      const waLink  = phone ? `https://wa.me/${phone}?text=${msgEnc}` : `https://wa.me/?text=${msgEnc}`;
+    list.innerHTML = filtered.map(grp => {
+      const isSent = isGroupSent(grp);
+      const many   = grp.members.length > 1;
+      const meta   = grp.noPhone
+        ? `⚠️ ללא טלפון · ${grp.side}`
+        : `${grp.members[0].phone} · ${grp.side}${grp.category ? ' · ' + grp.category : ''}`;
+      const title  = many
+        ? `${grp.names} <span style="opacity:.6;font-size:12px;">(${grp.members.length} רשומות · מספר משותף)</span>`
+        : grp.names;
+
+      let action;
+      if (grp.noPhone) {
+        action = isSent
+          ? `<span class="sent-badge">✅ סומן</span>`
+          : `<button class="btn-wa" style="background:#6b6b6b" onclick="markSent('${grp.key}')">
+               <span>✍️</span> סמן ידנית
+             </button>`;
+      } else if (isSent && currentFilter === 'waiting') {
+        action = `<button class="btn-wa" style="background:var(--gold-dark)" onclick="sendInvite('${grp.key}')">
+                    <span>⏳</span> שלח תזכורת
+                  </button>`;
+      } else if (isSent) {
+        action = `<span class="sent-badge">✅ נשלח</span>`;
+      } else {
+        action = `<button class="btn-wa" onclick="sendInvite('${grp.key}')">
+                    <span>📲</span> שלח
+                  </button>`;
+      }
 
       return `
-        <div class="guest-item ${isSent ? 'sent' : ''}" id="item-${g.id}">
+        <div class="guest-item ${isSent ? 'sent' : ''}" id="item-${grp.key}">
           <div class="guest-info">
-            <div class="guest-name">${g.name}</div>
-            <div class="guest-meta">${g.phone || 'ללא טלפון'} · ${g.side}${g.category ? ' · ' + g.category : ''}</div>
+            <div class="guest-name">${title}</div>
+            <div class="guest-meta">${meta}</div>
           </div>
-          ${isSent
-            ? (currentFilter === 'waiting'
-                ? `<button class="btn-wa" style="background:var(--gold-dark)" onclick="sendInvite('${g.id}', '${phone}')">
-                    <span>⏳</span> שלח תזכורת
-                   </button>`
-                : `<span class="sent-badge">✅ נשלח</span>`)
-            : `<button class="btn-wa" onclick="sendInvite('${g.id}', '${phone}')">
-                <span>📲</span> שלח
-               </button>`
-          }
+          ${action}
         </div>`;
     }).join('');
   }
 
   // ===== SEND =====
-  async function sendInvite(id, phone) {
+  async function markMembersSent(grp) {
+    for (const m of grp.members) sentMap[m.id] = true;
+    renderGuests();
+    updateStats();
+    if (!window._firebaseReady) return;
+    for (const m of grp.members) {
+      await window._set(window._ref(window._db, 'wa_sent/' + m.id), true);
+    }
+  }
+
+  function suggestNext() {
+    const next = groups.find(g => !isGroupSent(g) && !g.noPhone);
+    if (next) showToast(`הבא: ${next.members[0].name} ←`);
+    else showToast('🎉 כולם קיבלו הזמנה!');
+  }
+
+  async function sendInvite(groupKey) {
+    const grp = groups.find(g => g.key === groupKey);
+    if (!grp) return;
+
     const isReminder = currentFilter === 'waiting';
-    const msgToSend  = isReminder ? MSG_REMINDER : MSG;
-    const msgEnc = encodeURIComponent(msgToSend);
-    const waLink = phone ? `https://wa.me/${phone}?text=${msgEnc}` : `https://wa.me/?text=${msgEnc}`;
+    const msgEnc = encodeURIComponent(buildMsg(grp.primaryId, isReminder));
+    const phoneIntl = normalizePhone(grp.members[0].phone, true);
+    const waLink = phoneIntl
+      ? `https://wa.me/${phoneIntl}?text=${msgEnc}`
+      : `https://wa.me/?text=${msgEnc}`;
 
     // תיקון iOS/Safari: פתיחת WhatsApp מיד בלחיצה — לפני כל await,
     // אחרת ספארי חוסם את הפתיחה כפופאפ
     window.open(waLink, '_blank');
 
-    // סמן כנשלח (ברקע, אחרי הפתיחה)
-    if (window._firebaseReady) {
-      const sentRef = window._ref(window._db, 'wa_sent/' + id);
-      await window._set(sentRef, true);
-    }
-
+    await markMembersSent(grp);
     showToast(isReminder ? '⏳ תזכורת נשלחה!' : '✅ סומן כנשלח!');
-
-    setTimeout(() => {
-      const next = allGuests.find(g => !sentMap[g.id]);
-      if (next) showToast(`הבא: ${next.name} ←`);
-      else showToast('🎉 כולם קיבלו הזמנה!');
-    }, 1000);
+    setTimeout(suggestNext, 1000);
   }
   window.sendInvite = sendInvite;
+
+  // סימון ידני — למוזמן ללא טלפון, אחרי שנוצר איתו קשר בדרך אחרת
+  async function markSent(groupKey) {
+    const grp = groups.find(g => g.key === groupKey);
+    if (!grp) return;
+    if (!confirm(`לסמן את ${grp.names} כמי שקיבל/ה הזמנה?`)) return;
+    await markMembersSent(grp);
+    showToast('✅ סומן');
+  }
+  window.markSent = markSent;
 
   // ===== RESET =====
   async function resetAll() {
@@ -386,15 +476,21 @@
 
   // ===== STATS =====
   function updateStats() {
-    const total     = allGuests.length;
-    const sent      = allGuests.filter(g => sentMap[g.id]).length;
-    const confirmed = allGuests.filter(g => getStatus(g) === 'confirmed').length;
-    document.getElementById('statTotal').textContent     = total;
+    const sendable  = groups.filter(g => !g.noPhone);
+    const noPhone   = groups.filter(g => g.noPhone).length;
+    const total     = sendable.length;
+    const sent      = sendable.filter(isGroupSent).length;
+    const confirmed = groups.filter(g => getStatus(g) === 'confirmed').length;
+
+    document.getElementById('statTotal').textContent     = allGuests.length;
     document.getElementById('statSent').textContent      = sent;
     document.getElementById('statConfirmed').textContent = confirmed;
+
     const pct = total > 0 ? Math.round(sent / total * 100) : 0;
     document.getElementById('progressBar').style.width  = pct + '%';
-    document.getElementById('progressText').textContent = `${sent} / ${total} נשלחו (${pct}%)`;
+    document.getElementById('progressText').textContent =
+      `${sent} / ${total} מספרים נשלחו (${pct}%)` +
+      (noPhone ? ` · ${noPhone} ללא טלפון` : '');
   }
 
   // ===== FILTER =====
@@ -414,11 +510,13 @@
   window.setFilter = setFilter;
 
   // ===== NORMALIZE PHONE =====
-  function normalizePhone(p) {
+  // ברירת מחדל: פורמט מקומי (05...) — לצורך השוואות.
+  // intl=true: פורמט בינלאומי (9725...) — לצורך קישורי וואטסאפ.
+  function normalizePhone(p, intl = false) {
     if (!p) return '';
     let n = p.replace(/[-\s().+]/g, '').replace(/[oO]/g, '0');
-    if (n.startsWith('972')) return n;
-    if (n.startsWith('0'))   return '972' + n.slice(1);
+    if (n.startsWith('972')) n = '0' + n.slice(3);
+    if (intl) return n.startsWith('0') ? '972' + n.slice(1) : n;
     return n;
   }
 
